@@ -1,0 +1,107 @@
+{
+  "name": "vscode-ai-note",
+  "displayName": "vscode-ai-note",
+  "description": "AI powered coding test helper for VSCode",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.102.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscode-ai-note.setupProblem",
+        "title": "AI Note: 문제 풀이 시작"
+      },
+      {
+        "command": "vscode-ai-note.analyzeCode",
+        "title": "AI Note: 코드 분석 및 노트 생성"
+      },
+      {
+        "command": "vscode-ai-note.setGeminiApiKey",
+        "title": "AI Note: Gemini API 키 설정/업데이트"
+      },
+      {
+        "command": "vscode-ai-note.deleteGeminiApiKey",
+        "title": "AI Note: Gemini API 키 삭제"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vscode-ai-note.setupProblem",
+        "key": "alt+p",
+        "mac": "alt+p",
+        "linux": "alt+p",
+        "win": "alt+p",
+        "when": "editorTextFocus || explorerResourceIsFolder"
+      },
+      {
+        "command": "vscode-ai-note.analyzeCode",
+        "key": "alt+a",
+        "mac": "alt+a",
+        "linux": "alt+a",
+        "win": "alt+a",
+        "when": "editorHasSelection || editorTextFocus"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "vscode-ai-note.setupProblem",
+          "group": "2_ai_note@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "vscode-ai-note.analyzeCode",
+          "group": "2_ai_note@1",
+          "when": "editorHasSelection || editorTextFocus"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "vscode-ai-note.setupProblem",
+          "when": "false"
+        },
+        {
+          "command": "vscode-ai-note.analyzeCode",
+          "when": "false"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.102.0",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.25.1",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.99.7",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1"
+  }
+}
