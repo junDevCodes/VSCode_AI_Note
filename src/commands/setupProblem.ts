@@ -89,7 +89,7 @@ export class SetupProblemCommand {
       switch (language) {
         case "Python":
           fileExtension = "py";
-          initialFileContent = `# ${platformDisplayName} ${problemNumber} - Python Solution\n\nimport sys\n# input = sys.stdin.readline\n\ndef solve():\n    # TODO: 여기에 문제 풀이 코드를 작성하세요.\n    pass\n\nif __name__ == "__main__":\n    solve()\n`;
+          initialFileContent = `# ${platformDisplayName} ${problemNumber} - Python Solution\n\n# import sys\n# input = sys.stdin.readline\n\ndef solve():\n    # TODO: 여기에 문제 풀이 코드를 작성하세요.\n    pass\n\nif __name__ == "__main__":\n    solve()\n`;
           break;
         case "Java":
           fileExtension = "java";

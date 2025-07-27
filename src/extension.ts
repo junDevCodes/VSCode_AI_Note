@@ -4,17 +4,25 @@ import * as vscode from "vscode";
 import { SecretManager } from "./core/secretManager"; // SecretManager 임포트
 import { NotificationManager } from "./utils/notificationManager"; // NotificationManager 임포트
 
-import { SetupProblemCommand } from "./commands/setupProblem"; // 새로 생성한 명령어 로직 임포트
-import { AnalyzeCodeCommand } from "./commands/analyzeCode"; // 새로 생성한 명령어 로직 임포트
+import { SetupProblemCommand } from "./commands/setupProblem";
+import { AnalyzeCodeCommand } from "./commands/analyzeCode";
+import { TranslateNoteCommand } from "./commands/translateNote";
 
 // 상태 바 아이템을 전역적으로 관리 (deactivate 시 dispose 위함)
 let setupProblemStatusBarItem: vscode.StatusBarItem;
 let analyzeCodeStatusBarItem: vscode.StatusBarItem;
+let translateNoteStatusBarItem: vscode.StatusBarItem;
+
+export let aiNoteOutputChannel: vscode.OutputChannel;
 
 export function activate(context: vscode.ExtensionContext) {
   console.log(
     'Congratulations, your extension "vscode-ai-note" is now active!'
   );
+
+  aiNoteOutputChannel = vscode.window.createOutputChannel("VS Code AI Note");
+  aiNoteOutputChannel.appendLine("VS Code AI Note extension activated.");
+  context.subscriptions.push(aiNoteOutputChannel); // 확장이 비활성화될 때 채널도 dispose 되도록 등록
 
   // SecretManager 인스턴스 생성
   const secretManager = new SecretManager(context);
@@ -88,7 +96,18 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  context.subscriptions.push(disposableSetupProblem, disposableAnalyzeCode);
+  let disposableTranslateNote = vscode.commands.registerCommand(
+    "vscode-ai-note.translateAnalysisNote", // 이 ID를 사용합니다.
+    () => {
+      TranslateNoteCommand.run(context); // context를 TranslateNoteCommand에 전달
+    }
+  );
+
+  context.subscriptions.push(
+    disposableSetupProblem,
+    disposableAnalyzeCode,
+    disposableTranslateNote
+  );
 
   // 3. API 키를 수동으로 입력/삭제할 수 있는 명령어 추가
   context.subscriptions.push(
@@ -135,6 +154,16 @@ export function activate(context: vscode.ExtensionContext) {
   analyzeCodeStatusBarItem.show(); // 상태 바에 표시
   context.subscriptions.push(analyzeCodeStatusBarItem); // 확장 프로그램 비활성화 시 자동 dispose 되도록 등록
 
+  translateNoteStatusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    80 // analyzeCodeStatusBarItem보다 낮은 우선순위 (더 오른쪽)
+  );
+  translateNoteStatusBarItem.command = "vscode-ai-note.translateAnalysisNote"; // 연결할 명령어 ID
+  translateNoteStatusBarItem.text = "$(globe) 노트 번역"; // 아이콘과 텍스트
+  translateNoteStatusBarItem.tooltip = "현재 AI 분석 노트를 다른 언어로 번역"; // 툴팁
+  translateNoteStatusBarItem.show(); // 상태 바에 표시
+  context.subscriptions.push(translateNoteStatusBarItem); // 확장 프로그램 비활성화 시 자동 dispose 되도록 등록
+
   // --- 상태 바 아이템 추가 끝 ---
 }
 
@@ -145,4 +174,6 @@ export function deactivate() {
   // 상태 바 아이템도 dispose (context.subscriptions에 등록했으므로 사실 필수 아님)
   setupProblemStatusBarItem?.dispose();
   analyzeCodeStatusBarItem?.dispose();
+  translateNoteStatusBarItem?.dispose();
+  aiNoteOutputChannel?.dispose();
 }

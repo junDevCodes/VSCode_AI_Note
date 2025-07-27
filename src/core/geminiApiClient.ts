@@ -6,7 +6,8 @@ import {
 } from "@google/generative-ai";
 import { NotificationManager } from "../utils/notificationManager";
 import { SecretManager } from "./secretManager";
-import * as vscode from "vscode"; // vscode 모듈 임포트
+import * as vscode from "vscode";
+import { aiNoteOutputChannel } from "../extension";
 
 /**
  * Google Gemini API와 상호작용하는 클라이언트입니다.
@@ -65,6 +66,21 @@ export class GeminiApiClient {
     }
 
     try {
+      aiNoteOutputChannel.appendLine(
+        `[INFO] Attempting Gemini API call with model: ${this.modelName}`
+      );
+      aiNoteOutputChannel.appendLine(
+        `[DEBUG] Prompt length: ${prompt.length} characters.`
+      );
+      if (prompt.length > 1000) {
+        // 프롬프트가 너무 길면 일부만 출력
+        aiNoteOutputChannel.appendLine(
+          `[DEBUG] Prompt start: "${prompt.substring(0, 500)}..."`
+        );
+      } else {
+        aiNoteOutputChannel.appendLine(`[DEBUG] Full Prompt: "${prompt}"`);
+      }
+
       const model = this.genAI.getGenerativeModel({ model: this.modelName });
 
       // 안전 설정 (유해 콘텐츠 차단)
@@ -72,7 +88,7 @@ export class GeminiApiClient {
         temperature: 0.7, // 창의성 (0.0 ~ 1.0, 높을수록 창의적)
         topP: 0.9,
         topK: 40,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
       };
 
       const safetySettings = [
@@ -94,11 +110,6 @@ export class GeminiApiClient {
         },
       ];
 
-      NotificationManager.showStatusBarMessage(
-        "AI가 코드를 분석 중입니다...",
-        0
-      ); // 상태 바 메시지 표시
-
       const result = await model.generateContent({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig,
@@ -106,30 +117,99 @@ export class GeminiApiClient {
       });
 
       const response = result.response;
-      const text = response.text();
+      if (!response || !response.text) {
+        // 응답 객체가 없거나 text() 메서드가 없다면
 
-      NotificationManager.showInformation("AI 코드 분석이 완료되었습니다.");
+        let errorMessage = `Gemini API가 텍스트 응답을 생성하지 못했습니다.`;
+
+        if (response && response.candidates && response.candidates.length > 0) {
+          // 콘텐츠 차단 등의 이유로 텍스트 응답이 없을 수 있음
+          const finishReason = response.candidates[0]?.finishReason;
+          const safetyRatings = response.candidates[0]?.safetyRatings;
+          let errorMessage = `Gemini API가 텍스트 응답을 생성하지 못했습니다.`;
+
+          if (finishReason) {
+            errorMessage += ` 완료 이유: ${finishReason}.`;
+          }
+          if (safetyRatings && safetyRatings.length > 0) {
+            errorMessage += ` 안전 등급: ${JSON.stringify(safetyRatings)}.`;
+          }
+          NotificationManager.showError(errorMessage);
+          console.error(
+            "Gemini API Response Error (No text content):",
+            errorMessage,
+            result
+          );
+        } else {
+          NotificationManager.showError(
+            "Gemini API로부터 유효한 응답을 받지 못했습니다."
+          );
+          console.error(
+            "Gemini API Response Error (Empty or invalid):",
+            result
+          );
+        }
+        NotificationManager.showError(errorMessage);
+        aiNoteOutputChannel.appendLine(
+          `[ERROR] Gemini API Response Error: ${errorMessage}`
+        );
+        aiNoteOutputChannel.appendLine(
+          `[DEBUG] Full API Result: ${JSON.stringify(result, null, 2)}`
+        ); // 전체 결과 로그
+        return undefined;
+      }
+
+      const text = response.text();
+      aiNoteOutputChannel.appendLine("[INFO] Gemini API call successful.");
+      aiNoteOutputChannel.appendLine(
+        `[DEBUG] Received text length: ${text.length} characters.`
+      ); // ✨ 추가: 받은 텍스트 길이 로그 ✨
       return text;
     } catch (error: any) {
+      aiNoteOutputChannel.appendLine(
+        `[ERROR] An error occurred during Gemini API call processing.`
+      );
+      aiNoteOutputChannel.appendLine(`[ERROR] Error message: ${error.message}`);
+
+      let errorLogMessage: string;
+
       if (error.message.includes("API key not valid")) {
         NotificationManager.showError(
           "Gemini API 키가 유효하지 않습니다. 다시 설정해주세요."
         );
+        errorLogMessage = `Gemini API Key Error: ${error.message}`;
         console.error("Gemini API Key Error:", error);
       } else if (error.message.includes("User location is not supported")) {
         NotificationManager.showError(
           "현재 사용자 위치에서는 Gemini API 사용이 지원되지 않습니다."
         );
-        console.error("Gemini API Location Error:", error);
+        errorLogMessage = `Gemini API Location Error: ${error.message}`;
+      } else if (error.message.includes("quota exceeded")) {
+        NotificationManager.showError(
+          "Gemini API 호출 할당량이 초과되었습니다. 잠시 후 다시 시도하거나, Google Cloud 콘솔에서 할당량을 확인해주세요."
+        );
+        errorLogMessage = `Gemini API Quota Exceeded Error: ${error.message}`;
       } else {
         NotificationManager.showError(
           `Gemini API 호출 중 오류 발생: ${error.message}`
         );
-        console.error("Gemini API Call Error:", error);
+        errorLogMessage = `Gemini API Call Error: ${error.message}`;
       }
+      NotificationManager.showError(errorLogMessage);
+      aiNoteOutputChannel.appendLine(
+        `[ERROR] User-facing message: ${errorLogMessage}`
+      );
+      aiNoteOutputChannel.appendLine(
+        `[DEBUG] Full Error Object: ${JSON.stringify(
+          error,
+          Object.getOwnPropertyNames(error),
+          2
+        )}`
+      );
+      return undefined;
       return undefined;
     } finally {
-      NotificationManager.hideStatusBarMessage(); // 작업 완료 후 상태 바 메시지 숨기기
+      NotificationManager.hideStatusBarMessage();
     }
   }
 }
