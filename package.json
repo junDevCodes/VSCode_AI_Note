@@ -30,10 +30,6 @@
       {
         "command": "vscode-ai-note.deleteGeminiApiKey",
         "title": "AI Note: Gemini API 키 삭제"
-      },
-      {
-        "command": "vscode-ai-note.translateAnalysisNote",
-        "title": "AI Note: 분석 노트 번역"
       }
     ],
     "keybindings": [
@@ -52,14 +48,6 @@
         "linux": "alt+a",
         "win": "alt+a",
         "when": "editorHasSelection || editorTextFocus"
-      },
-      {
-        "command": "vscode-ai-note.translateAnalysisNote",
-        "key": "alt+t",
-        "mac": "alt+t",
-        "linux": "alt+t",
-        "win": "alt+t",
-        "when": "editorTextFocus && resourceLangId == markdown"
       }
     ],
     "menus": {
@@ -74,11 +62,6 @@
           "command": "vscode-ai-note.analyzeCode",
           "group": "2_ai_note@1",
           "when": "editorHasSelection || editorTextFocus"
-        },
-        {
-          "command": "vscode-ai-note.translateAnalysisNote",
-          "group": "2_ai_note@2",
-          "when": "editorTextFocus && resourceLangId == markdown"
         }
       ],
       "commandPalette": [
@@ -87,9 +70,6 @@
         },
         {
           "command": "vscode-ai-note.analyzeCode"
-        },
-        {
-          "command": "vscode-ai-note.translateAnalysisNote"
         },
         {
           "command": "vscode-ai-note.setGeminiApiKey"

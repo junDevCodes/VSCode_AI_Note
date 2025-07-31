@@ -3,3 +3,7 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+
+# Plannig Files
+development_priorities.md
+VSCode_AI_Note_planning.md
