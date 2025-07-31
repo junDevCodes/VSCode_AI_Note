@@ -88,7 +88,7 @@ export class GeminiApiClient {
         temperature: 0.7, // 창의성 (0.0 ~ 1.0, 높을수록 창의적)
         topP: 0.9,
         topK: 40,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
       };
 
       const safetySettings = [

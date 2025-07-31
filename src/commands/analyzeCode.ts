@@ -17,9 +17,6 @@ export class AnalyzeCodeCommand {
 
   /**
    * 파일 이름에서 플랫폼, 문제 ID, 제목을 파싱합니다.
-   * 예: "[백준]1000_A+B.py" -> { platform: "백준", problemId: "1000", title: "A+B" }
-   * 예: "[프로그래머스]42576_완주하지_못한_선수.js" -> { platform: "프로그래머스", problemId: "42576", title: "완주하지 못한 선수" }
-   * 예: "test_file.py" -> { platform: "Unknown", problemId: "Unknown", title: "test_file" }
    * @param fileName 파싱할 파일 이름
    * @returns 파싱된 정보 또는 기본값
    */
@@ -37,22 +34,72 @@ export class AnalyzeCodeCommand {
     // 플랫폼, 문제 ID, 제목을 유연하게 매칭하는 정규식
     // 플랫폼은 대괄호 [] 안에 선택 사항, 문제 ID는 숫자, 제목은 나머지 문자 (특수문자 포함)
     // 예: [플랫폼]문제ID_문제제목.확장자 또는 [플랫폼]문제ID-문제제목.확장자
-    const regex = /^(?:\[(.*?)\])?(\d+)[_.-]?(.*?)(?:\..+)?$/;
+
+    const regex =
+      /^(?:\[([^\]]+)\])?(?:([a-zA-Z가-힣]+)[-_])?(\d+)(?:[_.-]?(.*))?(?:\..+)?$/;
     const match = fileName.match(regex);
 
     if (match) {
-      result.platform = match[1] ? match[1].trim() : "Unknown"; // 플랫폼 추출
-      result.problemId = match[2] ? match[2].trim() : "Unknown"; // 문제 ID 추출
+      // 플랫폼 결정: [플랫폼] 그룹이 있으면 최우선, 다음으로 플랫폼_ 그룹 사용
+      result.platform = match[1] || match[2] || "Unknown";
+      if (result.platform !== "Unknown") {
+        result.platform = result.platform.trim();
+      }
 
-      // 제목 부분 처리: 언더스코어를 공백으로 바꾸고, 특수문자를 허용하며, 앞뒤 공백 제거
-      if (match[3] && match[3].trim().length > 0) {
-        result.title = match[3].replace(/_/g, " ").trim();
+      result.problemId = match[3] ? match[3].trim() : "Unknown"; // 문제 ID
+
+      // 제목 결정: 제목 그룹 (그룹 4)이 있으면 사용
+      if (match[4] && match[4].trim().length > 0) {
+        result.title = match[4].replace(/_/g, " ").trim();
       } else {
-        // 제목이 없는 경우, 파일명 전체에서 확장자만 제거한 것을 기본 제목으로 사용
-        result.title = path
-          .basename(fileName, path.extname(fileName))
-          .replace(/_/g, " ")
-          .trim();
+        // 제목이 명시되지 않은 경우, 파일명 전체에서 플랫폼과 ID를 제외한 부분을 기본 제목으로 사용
+        const baseName = path.basename(fileName, path.extname(fileName));
+        let tempTitle = baseName;
+
+        // 플랫폼 부분이 파일명 시작에 있다면 제거
+        if (
+          result.platform !== "Unknown" &&
+          baseName.startsWith(result.platform)
+        ) {
+          // 플랫폼 뒤에 구분자 (언더스코어, 하이픈)가 오는 경우도 고려하여 제거
+          const platformPrefix = `${result.platform}_`;
+          if (baseName.startsWith(platformPrefix)) {
+            tempTitle = baseName.substring(platformPrefix.length);
+          } else {
+            // ex: [플랫폼]ID_Title
+            // 플랫폼이 브라켓에 있는 경우는 이미 match[1]에서 처리되었고, baseName에서는 제거되지 않음
+            // 여기서는 플랫폼이 브라켓 없이 파일명에 직접 포함된 경우를 처리
+            const platformPlainPrefix = `${result.platform}`;
+            if (
+              baseName.startsWith(platformPlainPrefix) &&
+              baseName.charAt(platformPlainPrefix.length) === "_"
+            ) {
+              tempTitle = baseName.substring(platformPlainPrefix.length + 1);
+            }
+          }
+        }
+
+        // 문제 ID 부분이 남아있다면 제거
+        if (
+          result.problemId !== "Unknown" &&
+          tempTitle.startsWith(result.problemId)
+        ) {
+          tempTitle = tempTitle.substring(result.problemId.length);
+          // ID 뒤에 오는 구분자 (언더스코어, 하이픈, 점) 제거
+          if (
+            tempTitle.length > 0 &&
+            ["_", "-", "."].includes(tempTitle.charAt(0))
+          ) {
+            tempTitle = tempTitle.substring(1);
+          }
+        }
+
+        result.title = tempTitle.replace(/_/g, " ").trim();
+
+        // 만약 모든 제거 후 제목이 비어 있다면, 원래 기본 파일명 전체를 사용
+        if (result.title === "") {
+          result.title = baseName.replace(/_/g, " ").trim();
+        }
       }
     }
     return result;
@@ -124,6 +171,14 @@ export class AnalyzeCodeCommand {
 
       const analysisResult =
         await AnalyzeCodeCommand.geminiApiClient.generateContent(prompt);
+      
+        aiNoteOutputChannel.appendLine(
+        `[DEBUG] Full analysisResult object: ${JSON.stringify(
+          analysisResult,
+          null,
+          2
+        )}`
+      );
 
       if (analysisResult) {
         const workspaceRootUri = FileSystemManager.getWorkspaceRootUri();
