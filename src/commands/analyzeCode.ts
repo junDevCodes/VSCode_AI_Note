@@ -5,6 +5,7 @@ import { NotificationManager } from "../utils/notificationManager";
 import { GeminiApiClient } from "../core/geminiApiClient";
 import { SecretManager } from "../core/secretManager";
 import { FileSystemManager } from "../utils/fileSystemManager"; // FileSystemManager 임포트 추가
+import { AnalysisPostProcessor } from "../core/analysisPostProcessor";
 import { aiNoteOutputChannel } from "../extension";
 
 /**
@@ -13,7 +14,7 @@ import { aiNoteOutputChannel } from "../extension";
  */
 export class AnalyzeCodeCommand {
   private static geminiApiClient: GeminiApiClient | undefined;
-  private static readonly promptTemplateFileName = "analyze_code_prompt.md";
+  private static analysisPostProcessor: AnalysisPostProcessor | undefined;
 
   /**
    * 파일 이름에서 플랫폼, 문제 ID, 제목을 파싱합니다.
@@ -119,6 +120,12 @@ export class AnalyzeCodeCommand {
       const secretManager = new SecretManager(context);
       AnalyzeCodeCommand.geminiApiClient = new GeminiApiClient(secretManager);
     }
+    if (!AnalyzeCodeCommand.analysisPostProcessor) {
+      // geminiApiClient가 초기화된 후에 analysisPostProcessor를 초기화
+      AnalyzeCodeCommand.analysisPostProcessor = new AnalysisPostProcessor(
+        AnalyzeCodeCommand.geminiApiClient
+      );
+    }
 
     const initialized = await AnalyzeCodeCommand.geminiApiClient.initialize();
     if (!initialized) {
@@ -159,7 +166,7 @@ export class AnalyzeCodeCommand {
 
     try {
       // 프롬프트 생성 로직 변경: static 메서드로 분리하고 await 적용
-      const prompt = await AnalyzeCodeCommand.generatePrompt(
+      const prompt = await AnalyzeCodeCommand._generateInitialPrompt(
         // static 메서드 호출 및 await
         context,
         code,
@@ -169,18 +176,38 @@ export class AnalyzeCodeCommand {
         title
       );
 
-      const analysisResult =
+      const rawAnalysisResult =
         await AnalyzeCodeCommand.geminiApiClient.generateContent(prompt);
-      
-        aiNoteOutputChannel.appendLine(
+
+      aiNoteOutputChannel.appendLine(
         `[DEBUG] Full analysisResult object: ${JSON.stringify(
-          analysisResult,
+          rawAnalysisResult,
           null,
           2
         )}`
       );
 
-      if (analysisResult) {
+      if (rawAnalysisResult && AnalyzeCodeCommand.analysisPostProcessor) {
+        const finalMarkdownContent =
+          await AnalyzeCodeCommand.analysisPostProcessor.processAnalysisResult(
+            rawAnalysisResult,
+            context,
+            code,
+            language,
+            platform,
+            problemId,
+            title
+          );
+
+        if (!finalMarkdownContent) {
+          NotificationManager.showError(
+            "AI 분석 노트 생성에 실패했습니다. 후처리 과정에서 문제가 발생했습니다."
+          );
+          aiNoteOutputChannel.appendLine(
+            "[ERROR] Final markdown content was undefined after post-processing."
+          );
+          return;
+        }
         const workspaceRootUri = FileSystemManager.getWorkspaceRootUri();
         if (!workspaceRootUri) {
           NotificationManager.showError(
@@ -208,7 +235,7 @@ export class AnalyzeCodeCommand {
 
         const fileWritten = await FileSystemManager.writeFile(
           analysisFilePath,
-          analysisResult
+          finalMarkdownContent
         );
         if (fileWritten) {
           NotificationManager.showInformation(
@@ -268,7 +295,7 @@ export class AnalyzeCodeCommand {
    * @param title 문제 제목 (예: "K번째 수")
    * @returns 생성된 프롬프트 텍스트 (Promise 반환)
    */
-  private static async generatePrompt(
+  private static async _generateInitialPrompt(
     context: vscode.ExtensionContext,
     code: string,
     language: string,
@@ -276,6 +303,7 @@ export class AnalyzeCodeCommand {
     problemId: string,
     title: string
   ): Promise<string> {
+    const promptTemplateFileName = "analyze_code_prompt.md";
     const analyzedAt = new Date().toISOString().split("T")[0]; // YYYY-MM-DD 형식
 
     // 프롬프트 템플릿 파일 경로 구성
@@ -283,7 +311,7 @@ export class AnalyzeCodeCommand {
       context.extensionPath,
       "src",
       "prompts",
-      AnalyzeCodeCommand.promptTemplateFileName
+      promptTemplateFileName
     );
     let promptTemplateContent: string;
 
@@ -314,25 +342,9 @@ export class AnalyzeCodeCommand {
       problemId !== "Unknown" ? problemId : "Unknown ID";
     const effectiveTitle = title !== "Unknown" ? title : "Untitled Problem";
 
-    // 메인 제목 생성 (템플릿의 {{mainHeading}}에 바인딩)
-    const mainHeading = `## ${effectivePlatform} ${effectiveProblemId} ${language} 코드 분석`;
-
-    // 서두 문장 생성 (템플릿의 {{initialSentence}}에 바인딩)
-    const initialSentence = `${effectivePlatform}${
-      effectiveProblemId !== "Unknown ID" ? ` ${effectiveProblemId}` : ""
-    }${
-      effectiveTitle !== "Untitled Problem" ? ` (${effectiveTitle})` : ""
-    } ${language} 코드는 다음과 같습니다.`;
-
     // 플레이스홀더 대체
     let prompt = promptTemplateContent
-      .replace(/{{yamlPlatform}}/g, effectivePlatform) // YAML Front Matter용 플랫폼
-      .replace(/{{yamlProblemId}}/g, effectiveProblemId) // YAML Front Matter용 문제 ID
-      .replace(/{{yamlTitle}}/g, effectiveTitle) // YAML Front Matter용 문제 제목
       .replace(/{{language}}/g, language) // YAML Front Matter 및 본문용 언어
-      .replace(/{{analyzedAt}}/g, analyzedAt) // YAML Front Matter 및 본문용 분석 날짜
-      .replace(/{{mainHeading}}/g, mainHeading) // 본문 메인 제목
-      .replace(/{{initialSentence}}/g, initialSentence) // 본문 서두 문장
       .replace(/{{code}}/g, code); // 분석할 코드
 
     return prompt;
